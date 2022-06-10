@@ -12,20 +12,30 @@ from Crypto.Util.Padding import pad, unpad
 
 key = get_random_bytes(16)
 iv = get_random_bytes(16)
-counter_dvb = [0, 0]
-counter_v34 = [0, 0]
-counter_x16 = [0, 0]
+counter_dvb_scrambled = [0, 0]
+counter_v34_scrambled = [0, 0]
+counter_x16_scrambled = [0, 0]
+counter_dvb_descrambled = [0, 0]
+counter_v34_descrambled = [0, 0]
+counter_x16_descrambled = [0, 0]
 data_counter = [0, 0]
 
-counter_dvb_diffrent_bits = []
-counter_v34_diffrent_bits = []
-counter_x16_diffrent_bits = []
-counter_data_diffrent_bits = []
 
-counter_dvb_longest_sequence = [0, 0]
-counter_v34_longest_sequence = [0, 0]
-counter_x16_longest_sequence = [0, 0]
+
+counter_dvb_error_bits = []
+counter_v34_error_bits = []
+counter_x16_error_bits = []
+counter_data_error_bits = []
+
+counter_dvb_longest_sequence_scrambled = [0, 0]
+counter_v34_longest_sequence_scrambled = [0, 0]
+counter_x16_longest_sequence_scrambled = [0, 0]
+counter_dvb_longest_sequence_descrambled = [0, 0]
+counter_v34_longest_sequence_descrambled = [0, 0]
+counter_x16_longest_sequence_descrambled = [0, 0]
 counter_data_longest_sequence = [0, 0]
+
+
 
 switch_intensity = 1
 
@@ -143,7 +153,7 @@ def encryption(data, array):
     pt = unpad(cipher2.decrypt(ct_bytes), AES.block_size).decode("utf-8")
     desired_array = [int(numeric_string) for numeric_string in pt]
     bits_to_bytes(desired_array, array)
-    cv2.imwrite('Output/AES/AES_descryption.jpg', array)  # Save image after decryption
+    cv2.imwrite('Output/AES/AES_decryption.jpg', array)  # Save image after decryption
 
 
 # Convert image bytes to bits
@@ -159,6 +169,26 @@ def image_to_bits(data, bits):  # data -> bytes, bits -> Target bit storage
         for k in range(0, len(bit_array)):
             bits.append(bit_array[k])
 
+def count_sequence(bits, counter):
+    max_zeros_amount = 0
+    max_ones_amount = 0
+    amount = 0  # Number of the same bits in sequence
+    is_zero_now = True  # Used to count the number of the same bits in sequence
+    index = 5  # Loop index
+    
+    while index < len(bits):  # For each bit, index -> bit
+        if (bits[index] == 0 and is_zero_now) or (bits[index] == 1 and not is_zero_now):  # Counting
+            amount += 1
+            if is_zero_now and max_zeros_amount < amount:
+                max_zeros_amount = amount
+            elif (not is_zero_now) and max_ones_amount < amount:
+                max_ones_amount = amount
+        else:
+            is_zero_now = not is_zero_now
+            amount = 0
+        index += 1
+    counter[0] = max_zeros_amount
+    counter[1] = max_ones_amount  
 
 # Swap bits after too long a sequence of a single bit
 def switch_bits(bits, switch_chance, counter, do_count):
@@ -168,7 +198,7 @@ def switch_bits(bits, switch_chance, counter, do_count):
     chance = 0  # Chance to skip a bit
     is_zero_now = True  # Used to count the number of the same bits in sequence
     index = 5  # Loop index
-
+    
     while index < len(bits):  # For each bit, index -> bit
         if (bits[index] == 0 and is_zero_now) or (bits[index] == 1 and not is_zero_now):  # Counting
             amount += 1
@@ -227,7 +257,7 @@ def tests_DVB(bits, array):
     descrambled_dvb_array = array.copy()
 
     scrambled_dvb_bits = scram_DVB(bits.copy())  # Scrambling
-    sum_of_bits(scrambled_dvb_bits, counter_dvb)  # Counting the number of bits
+    sum_of_bits(scrambled_dvb_bits, counter_dvb_scrambled)  # Counting the number of bits
     bits_to_bytes(scrambled_dvb_bits, scrambled_dvb_array)  # Convert bits to bytes
     if not(os.path.exists('Output/DVB')): # Check whether the specified path exists or not
         os.makedirs('Output/DVB')
@@ -238,15 +268,17 @@ def tests_DVB(bits, array):
 
     for i in range(1, 101):  # Loop in range 1-100
         if i == switch_intensity:  # Save image with sample (No. 50 – middle)
-            switch_bits(scrambled_dvb_bits, i, counter_dvb_longest_sequence, True)  # Bits switching
+            switch_bits(scrambled_dvb_bits, i, counter_dvb_longest_sequence_scrambled, True)  # Bits switching
             descrambled_dvb_bits = scram_DVB(scrambled_dvb_bits)  # Descrambling
+            count_sequence(descrambled_dvb_bits, counter_dvb_longest_sequence_descrambled)
+            sum_of_bits(descrambled_dvb_bits, counter_dvb_descrambled)  # Counting the number of bits
             bits_to_bytes(descrambled_dvb_bits, descrambled_dvb_array)  # Convert bits to bytes
             cv2.imwrite('Output/DVB/DVB_descrambled.jpg', descrambled_dvb_array)  # Saving the descrambled image
         else:
-            switch_bits(scrambled_dvb_bits, i, counter_dvb_longest_sequence, False)  # Bits switching
+            switch_bits(scrambled_dvb_bits, i, counter_dvb_longest_sequence_scrambled, False)  # Bits switching
             descrambled_dvb_bits = scram_DVB(scrambled_dvb_bits)  # Descrambling
 
-        count_switched_bits(descrambled_dvb_bits, counter_dvb_diffrent_bits)
+        count_different_bits(descrambled_dvb_bits, counter_dvb_error_bits)
         scrambled_dvb_bits = scrambled_dvb_bits_copy.copy()  # Restore a scrambled image with modified bits to the original image
 
 
@@ -256,7 +288,7 @@ def tests_V34(bits, array):
     descrambled_v34_array = array.copy()
 
     scrambled_v34_bits = scram_V34(bits.copy())  # Scrambling
-    sum_of_bits(scrambled_v34_bits, counter_v34)  # Counting the number of bits
+    sum_of_bits(scrambled_v34_bits, counter_v34_scrambled)  # Counting the number of bits
     bits_to_bytes(scrambled_v34_bits, scrambled_v34_array)  # Convert bits to bytes
     if not(os.path.exists('Output/V34')): # Check whether the specified path exists or not
         os.makedirs('Output/V34')
@@ -267,14 +299,16 @@ def tests_V34(bits, array):
 
     for i in range(1, 101):  # Loop in range 1-100
         if i == switch_intensity:  # Save image with sample (No. 50 – middle)
-            switch_bits(scrambled_v34_bits, i, counter_v34_longest_sequence, True)  # Bits switching
+            switch_bits(scrambled_v34_bits, i, counter_v34_longest_sequence_scrambled, True)  # Bits switching
             descrambled_v34_bits = descram_V34(scrambled_v34_bits)  # Descrambling
+            count_sequence(descrambled_v34_bits, counter_v34_longest_sequence_descrambled)
+            sum_of_bits(descrambled_v34_bits, counter_v34_descrambled)  # Counting the number of bits
             bits_to_bytes(descrambled_v34_bits, descrambled_v34_array)  # Convert bits to bytes
             cv2.imwrite('Output/V34/V34_descrambled.jpg', descrambled_v34_array)  # Saving the descrambled image
         else:
-            switch_bits(scrambled_v34_bits, i, counter_v34_longest_sequence, False)  # Bits switching
+            switch_bits(scrambled_v34_bits, i, counter_v34_longest_sequence_scrambled, False)  # Bits switching
             descrambled_v34_bits = descram_V34(scrambled_v34_bits)  # Descrambling
-        count_switched_bits(descrambled_v34_bits, counter_v34_diffrent_bits)
+        count_different_bits(descrambled_v34_bits, counter_v34_error_bits)
         scrambled_v34_bits = scrambled_v34_bits_copy.copy()  # Restore a scrambled image with modified bits to the original image
 
 
@@ -284,7 +318,7 @@ def tests_X16(bits, array):
     descrambled_x16_array = array.copy()
 
     scrambled_x16_bits = scram_X16(bits.copy())  # Scrambling
-    sum_of_bits(scrambled_x16_bits, counter_x16)  # Counting the number of bits
+    sum_of_bits(scrambled_x16_bits, counter_x16_scrambled)  # Counting the number of bits
     bits_to_bytes(scrambled_x16_bits, scrambled_x16_array)  # Convert bits to bytes
     if not(os.path.exists('Output/X16')): # Check whether the specified path exists or not
         os.makedirs('Output/X16')
@@ -295,14 +329,16 @@ def tests_X16(bits, array):
 
     for i in range(1, 101):  # Loop in range 1-100
         if i == switch_intensity:  # Save image with sample (No. 50 – middle)
-            switch_bits(scrambled_x16_bits, i, counter_x16_longest_sequence, True)  # Bits switching
+            switch_bits(scrambled_x16_bits, i, counter_x16_longest_sequence_scrambled, True)  # Bits switching
             descrambled_x16_bits = scram_X16(scrambled_x16_bits)  # Descrambling
+            count_sequence(descrambled_x16_bits, counter_x16_longest_sequence_descrambled)
+            sum_of_bits(descrambled_x16_bits, counter_x16_descrambled)  # Counting the number of bits
             bits_to_bytes(descrambled_x16_bits, descrambled_x16_array)  # Convert bits to bytes
             cv2.imwrite('Output/X16/X16_descrambled.jpg', descrambled_x16_array)  # Saving the descrambled image
         else:
-            switch_bits(scrambled_x16_bits, i, counter_x16_longest_sequence, False)  # Bits switching
+            switch_bits(scrambled_x16_bits, i, counter_x16_longest_sequence_scrambled, False)  # Bits switching
             descrambled_x16_bits = scram_X16(scrambled_x16_bits)  # Descrambling
-        count_switched_bits(descrambled_x16_bits, counter_x16_diffrent_bits)
+        count_different_bits(descrambled_x16_bits, counter_x16_error_bits)
         scrambled_x16_bits = scrambled_x16_bits_copy.copy()  # Restore a scrambled image with modified bits to the original image
 
 
@@ -320,10 +356,10 @@ def tests_start(bits, array):
             cv2.imwrite('Output/Statistics/switched_bits.jpg', image_switched_array)
         else:
             switch_bits(image_switched_bits, i, counter_data_longest_sequence, False)
-        count_switched_bits(image_switched_bits, counter_data_diffrent_bits)
+        count_different_bits(image_switched_bits, counter_data_error_bits)
 
 
-def count_switched_bits(bits, counter):
+def count_different_bits(bits, counter):
     count = 0  # Counter of the number of changed bits
     for i in range(0, len(image_data_bits)):  # Loop over the entire data length
         if image_data_bits[i] is not bits[i]:  # If the bits are not equal, add 1 to the counter
@@ -344,22 +380,31 @@ def write_stats_to_xlsx(): # Save statiscics to .xlsx file
                                                 {'header': 'V34'},
                                                 {'header': 'X16'}]})
 
-    worksheet.write(1, 1, 'Amount of bits switched')
+    worksheet.write(1, 1, 'Amount of error bits')
 
     for i in range(0, 100):
         worksheet.write(i + 3, 1, i + 1)
-        worksheet.write(i + 3, 2, counter_data_diffrent_bits[i])
-        worksheet.write(i + 3, 3, counter_dvb_diffrent_bits[i])
-        worksheet.write(i + 3, 4, counter_v34_diffrent_bits[i])
-        worksheet.write(i + 3, 5, counter_x16_diffrent_bits[i])
+        worksheet.write(i + 3, 2, counter_data_error_bits[i])
+        worksheet.write(i + 3, 3, counter_dvb_error_bits[i])
+        worksheet.write(i + 3, 4, counter_v34_error_bits[i])
+        worksheet.write(i + 3, 5, counter_x16_error_bits[i])
 
-    worksheet.add_table('H3:L5', {'header_row': True, 'style': table_style,
+    worksheet.write(1,7,'Entry point')
+    worksheet.write(1,10,'After scrambling')
+    worksheet.write(1,14,'After descrambling')
+    
+    worksheet.add_table('H3:Q5', {'header_row': True, 'style': table_style,
                                     'autofilter': False, 'first_column': True,
                                     'columns': [{'header': 'Longest bit sequence'},
                                                 {'header': 'Start'},
+                                                {'header': ' '},
                                                 {'header': 'DVB'},
                                                 {'header': 'V34'},
-                                                {'header': 'X16'}]})
+                                                {'header': 'X16'},
+                                                {'header': '.'},
+                                                {'header': 'DVB.'},
+                                                {'header': 'V34.'},
+                                                {'header': 'X16.'}]})
 
     worksheet.write(3, 7, '0')
     worksheet.write(4, 7, '1')
@@ -367,22 +412,36 @@ def write_stats_to_xlsx(): # Save statiscics to .xlsx file
     worksheet.write(3, 8, counter_data_longest_sequence[0])
     worksheet.write(4, 8, counter_data_longest_sequence[1])
 
-    worksheet.write(3, 9, counter_dvb_longest_sequence[0])
-    worksheet.write(4, 9, counter_dvb_longest_sequence[1])
+    worksheet.write(3, 10, counter_dvb_longest_sequence_scrambled[0])
+    worksheet.write(4, 10, counter_dvb_longest_sequence_scrambled[1])
 
-    worksheet.write(3, 10, counter_v34_longest_sequence[0])
-    worksheet.write(4, 10, counter_v34_longest_sequence[1])
+    worksheet.write(3, 11, counter_v34_longest_sequence_scrambled[0])
+    worksheet.write(4, 11, counter_v34_longest_sequence_scrambled[1])
 
-    worksheet.write(3, 11, counter_x16_longest_sequence[0])
-    worksheet.write(4, 11, counter_x16_longest_sequence[1])
+    worksheet.write(3, 12, counter_x16_longest_sequence_scrambled[0])
+    worksheet.write(4, 12, counter_x16_longest_sequence_scrambled[1])
 
-    worksheet.add_table('H7:L9', {'header_row': True, 'style': table_style,
+    worksheet.write(3, 14, counter_dvb_longest_sequence_descrambled[0])
+    worksheet.write(4, 14, counter_dvb_longest_sequence_descrambled[1])
+
+    worksheet.write(3, 15, counter_v34_longest_sequence_descrambled[0])
+    worksheet.write(4, 15, counter_v34_longest_sequence_descrambled[1])
+
+    worksheet.write(3, 16, counter_x16_longest_sequence_descrambled[0])
+    worksheet.write(4, 16, counter_x16_longest_sequence_descrambled[1])
+
+    worksheet.add_table('H7:Q9', {'header_row': True, 'style': table_style,
                                   'autofilter': False, 'first_column': True,
                                   'columns': [{'header': 'Amount of bits'},
                                               {'header': 'Start'},
+                                              {'header': ' '},
                                               {'header': 'DVB'},
                                               {'header': 'V34'},
-                                              {'header': 'X16'}]})
+                                              {'header': 'X16'},
+                                              {'header': '.'},
+                                              {'header': 'DVB.'},
+                                              {'header': 'V34.'},
+                                              {'header': 'X16.'}]})
 
     worksheet.write(7, 7, '0')
     worksheet.write(8, 7, '1')
@@ -390,14 +449,23 @@ def write_stats_to_xlsx(): # Save statiscics to .xlsx file
     worksheet.write(7, 8, data_counter[0])
     worksheet.write(8, 8, data_counter[1])
 
-    worksheet.write(7, 9, counter_dvb[0])
-    worksheet.write(8, 9, counter_dvb[1])
+    worksheet.write(7, 10, counter_dvb_scrambled[0])
+    worksheet.write(8, 10, counter_dvb_scrambled[1])
 
-    worksheet.write(7, 10, counter_v34[0])
-    worksheet.write(8, 10, counter_v34[1])
+    worksheet.write(7, 11, counter_v34_scrambled[0])
+    worksheet.write(8, 11, counter_v34_scrambled[1])
 
-    worksheet.write(7, 11, counter_x16[0])
-    worksheet.write(8, 11, counter_x16[1])
+    worksheet.write(7, 12, counter_x16_scrambled[0])
+    worksheet.write(8, 12, counter_x16_scrambled[1])
+    
+    worksheet.write(7, 14, counter_dvb_descrambled[0])
+    worksheet.write(8, 14, counter_dvb_descrambled[1])
+
+    worksheet.write(7, 15, counter_v34_descrambled[0])
+    worksheet.write(8, 15, counter_v34_descrambled[1])
+
+    worksheet.write(7, 16, counter_x16_descrambled[0])
+    worksheet.write(8, 16, counter_x16_descrambled[1])
 
     workbook.close()
 
@@ -406,31 +474,31 @@ def print_stats():
     print(f"================== START IMAGE ==================")
     print((f"| Amount of Bits: [0:{data_counter[0]}], [1:{data_counter[1]}]").ljust(48)+"|")
     print((f"| Longest sequence of bits: [0:{counter_data_longest_sequence[0]}], [1:{counter_data_longest_sequence[1]}]").ljust(48)+"|")
-    print((f"| Amount of bits switched: {counter_data_diffrent_bits[switch_intensity - 1]}").ljust(48)+"|")
+    print((f"| Amount of error bits: {counter_data_error_bits[switch_intensity - 1]}").ljust(48)+"|")
 
     print(f"====================== DVB ======================")
-    print((f"| Amount of Bits: [0:{counter_dvb[0]}], [1:{counter_dvb[1]}]").ljust(48)+"|")
-    print((f"| Longest sequence of bits: [0:{counter_dvb_longest_sequence[0]}], [1:{counter_dvb_longest_sequence[1]}]").ljust(48)+"|")
-    print((f"| Amount of bits switched: {counter_dvb_diffrent_bits[switch_intensity - 1]}").ljust(48)+"|")
+    print((f"| Amount of Bits: [0:{counter_dvb_scrambled[0]}], [1:{counter_dvb_scrambled[1]}]").ljust(48)+"|")
+    print((f"| Longest sequence of bits: [0:{counter_dvb_longest_sequence_scrambled[0]}], [1:{counter_dvb_longest_sequence_scrambled[1]}]").ljust(48)+"|")
+    print((f"| Amount of error bits: {counter_dvb_error_bits[switch_intensity - 1]}").ljust(48)+"|")
 
     print(f"====================== V34 ======================")
-    print((f"| Amount of Bits: [0:{counter_v34[0]}], [1:{counter_v34[1]}]").ljust(48)+"|")
-    print((f"| Longest sequence of bits: [0:{counter_v34_longest_sequence[0]}], [1:{counter_v34_longest_sequence[1]}]").ljust(48)+"|")
-    print((f"| Amount of bits switched: {counter_v34_diffrent_bits[switch_intensity - 1]}").ljust(48)+"|")
+    print((f"| Amount of Bits: [0:{counter_v34_scrambled[0]}], [1:{counter_v34_scrambled[1]}]").ljust(48)+"|")
+    print((f"| Longest sequence of bits: [0:{counter_v34_longest_sequence_scrambled[0]}], [1:{counter_v34_longest_sequence_scrambled[1]}]").ljust(48)+"|")
+    print((f"| Amount of error bits: {counter_v34_error_bits[switch_intensity - 1]}").ljust(48)+"|")
 
     print(f"====================== X16 ======================")
-    print((f"| Amount of Bits: [0:{counter_x16[0]}], [1:{counter_x16[1]}]").ljust(48)+"|")
-    print((f"| Longest sequence of bits: [0:{counter_x16_longest_sequence[0]}], [1:{counter_x16_longest_sequence[1]}]").ljust(48)+"|")
-    print((f"| Amount of bits switched: {counter_x16_diffrent_bits[switch_intensity - 1]}]").ljust(48)+"|")
+    print((f"| Amount of Bits: [0:{counter_x16_scrambled[0]}], [1:{counter_x16_scrambled[1]}]").ljust(48)+"|")
+    print((f"| Longest sequence of bits: [0:{counter_x16_longest_sequence_scrambled[0]}], [1:{counter_x16_longest_sequence_scrambled[1]}]").ljust(48)+"|")
+    print((f"| Amount of error bits: {counter_x16_error_bits[switch_intensity - 1]}").ljust(48)+"|")
     print(f"=================================================")
-    print(f"\nThe number of exchanged bits displayed at a conversion intensity of {switch_intensity}!")
+    print(f"\nThe number of error bits displayed at a conversion intensity of {switch_intensity}!")
 
 
 def del_output():
     os.remove("Output/Statistics/start_image.jpg")
     os.remove("Output/Statistics/switched_bits.jpg")
     os.remove("Output/Statistics/stats.xlsx")
-    os.remove("Output/AES/AES_descryption.jpg")
+    os.remove("Output/AES/AES_decryption.jpg")
     os.remove("Output/AES/AES_encryption.jpg")
     os.remove("Output/DVB/DVB_scrambled.jpg")
     os.remove("Output/DVB/DVB_descrambled.jpg")
